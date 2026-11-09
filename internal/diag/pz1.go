@@ -36,6 +36,7 @@ type FuncInfo struct {
 	MCU, Latch, Dec, Buf, KbCol, KbRow, IndReg, Y2Reg string // «DD1 AT89S53» и т.п.
 	CSBuf, CSKb, CSInd, CSY2                          string // Yn
 	Keyboard, Y1Pin, Y2Pin, CSEn                      string
+	BufAddrLast                                       int
 }
 
 // Functional — функциональная схема: МК, защёлка адреса, дешифратор, буфер, пульт (клавиатура, индикатор), регистр Y2.
@@ -48,32 +49,34 @@ func Functional(fi FuncInfo, fontTTF []byte, fontMM, stroke float64) (image.Imag
 	c.Box(4, 18, 34, 92, "Микроконтроллер\n"+fi.MCU+"\n\nINT0 ← клавиатура\nINT1 ← строб X2")
 	// шины
 	busD, busA := 30.0, 44.0
-	c.Thick(1.2, 38, busD, 166, busD)
+	c.Thick(1.2, 38, busD, 144, busD)
 	c.Text("AD0–AD7 (данные / младший адрес)", 100, busD-3, 0.5, 0)
 	c.Box(46, 38, 26, 14, "Защёлка\nадреса\n"+fi.Latch)
 	c.Line(true, 59, busD, 59, 38)
 	c.Line(true, 38, 48, 46, 48) // ALE
 	c.Text("ALE", 40, 46, 0, fontMM*0.75)
-	c.Thick(1.2, 72, busA, 166, busA)
-	c.Text("A0–A12", 150, busA-3, 0.5, 0)
+	c.Thick(1.2, 72, busA, 98, busA)
+	c.Text(fmt.Sprintf("A0–A%d", fi.BufAddrLast), 87, busA-3, 0.5, 0)
+	c.Line(true, 38, 54.5, 76, 54.5, 76, busA)
+	c.Text(fmt.Sprintf("A8–A%d", fi.BufAddrLast), 40, 53, 0, fontMM*0.7)
+	c.Line(true, 98, busA, 98, 56)
 	// дешифратор
 	c.Box(46, 60, 26, 20, "Дешифратор\n"+fi.Dec)
 	c.Line(true, 38, 66, 46, 66)
-	c.Text("A13–A15", 40, 64, 0, fontMM*0.7)
+	c.Text("A13–A15", 39, 64, 0, fontMM*0.6)
 	c.Line(true, 38, 76, 46, 76)
-	c.Text(fi.CSEn, 40, 74, 0, fontMM*0.7)
+	c.Text(fi.CSEn, 39, 74, 0, fontMM*0.6)
 	// устройства
 	type dev struct {
-		x                  float64
-		title, cs, special string
+		x, dataX  float64
+		title, cs string
 	}
-	devs := []dev{{80, "Кольцевой буфер\n" + fi.Buf, fi.CSBuf, ""}, {108, "Клавиатура\n" + fi.Keyboard + "\n" + fi.KbCol + ", " + fi.KbRow, fi.CSKb, "INT0"},
-		{136, "Индикатор\n" + fi.IndReg, fi.CSInd, ""}}
+	devs := []dev{{80, 102, "Кольцевой буфер\n" + fi.Buf, fi.CSBuf}, {108, 116, "Клавиатура\n" + fi.Keyboard + "\n" + fi.KbCol + ", " + fi.KbRow, fi.CSKb},
+		{136, 144, "Индикатор\n" + fi.IndReg, fi.CSInd}}
 	csY := 92.0
 	for _, d := range devs {
 		c.Box(d.x, 56, 26, 26, d.title)
-		c.Line(true, d.x+8, busD, d.x+8, 56)
-		c.Line(true, d.x+18, busA, d.x+18, 56)
+		c.Line(true, d.dataX, busD, d.dataX, 56)
 		c.Line(true, d.x+13, csY, d.x+13, 82)
 		c.Text(d.cs, d.x+14, 86, 0, fontMM*0.7)
 	}

@@ -269,7 +269,8 @@ func pz1(d *pz.Doc, p *variant.Params, st *variant.Student, sheetDir, out string
 	f1, err := diag.Functional(diag.FuncInfo{MCU: sj.Refs["mcu"][0] + " AT89S53", Latch: sj.Refs["latchA"][0], Dec: sj.Refs["dec"][0],
 		Buf: sj.Refs["idt"][0] + " IDT7005", KbCol: sj.Refs["kb173"][0], KbRow: sj.Refs["buf"][0], IndReg: sj.Refs["latchInd"][0],
 		Y2Reg: sj.Refs["latchY2"][0], CSBuf: dev("Буфер (IDT7005)"), CSKb: dev("Клавиатура"), CSInd: dev("Индикатор"), CSY2: dev("Регистр Y2"),
-		Keyboard: strings.ReplaceAll(p.Keyboard, "x", "×"), Y1Pin: p.Y1Pin, Y2Pin: p.Y2Pin, CSEn: "CS_EN (" + p.CSEnPin + ")"}, font, fmm, stroke)
+		BufAddrLast: int(math.Ceil(math.Log2(float64(p.V)))) - 1,
+		Keyboard:    strings.ReplaceAll(p.Keyboard, "x", "×"), Y1Pin: p.Y1Pin, Y2Pin: p.Y2Pin, CSEn: "CS_EN"}, font, fmm, stroke)
 	die(err)
 	die(writePNG(filepath.Join(out, "func.png"), f1))
 	in.Figs["func"] = "func.png"
