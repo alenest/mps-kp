@@ -213,9 +213,13 @@ func schematic(p *variant.Params, st *variant.Student, out, libPath, wksPath str
 	}
 	regions := sh.Regions() // до String(): тот сдвигает лист и обнуляет сдвиг
 	jit := sh.J
+	fullSheet, fragments := sh.Drawings()
 	writes := map[string]string{
-		"schematic.kicad_sch": sh.String(),
+		"schematic.kicad_sch": fullSheet,
 		"schematic.kicad_pro": schgen.Project,
+	}
+	for name, fragment := range fragments {
+		writes["fragment-"+name+".kicad_sch"] = fragment
 	}
 	if v.Style.FullFrame {
 		wksPath = strings.TrimSuffix(wksPath, ".kicad_wks") + "_full.kicad_wks"

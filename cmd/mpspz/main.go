@@ -236,15 +236,27 @@ func pz1(d *pz.Doc, p *variant.Params, st *variant.Student, sheetDir, out string
 		Figs: map[string]string{}, FigW: map[string]float64{}}
 	W := float64(src.Bounds().Dx())
 	pxmm := W / sj.Paper[0]
+	warned := false
 	for name, r := range sj.Regions {
-		rect := image.Rect(int(r.X0*pxmm), int(r.Y0*pxmm), int(r.X1*pxmm), int(r.Y1*pxmm)).Intersect(src.Bounds())
+		fragment, err := readPNG(filepath.Join(sheetDir, "fragment-"+name+".png"))
+		var rect image.Rectangle
+		if os.IsNotExist(err) {
+			if !warned {
+				fmt.Println("  ⚠ рисунки со старого листа Э3: для новых рисунков узлов пересоберите КМ-1")
+				warned = true
+			}
+			fragment = src
+			rect = image.Rect(int(r.X0*pxmm), int(r.Y0*pxmm), int(r.X1*pxmm), int(r.Y1*pxmm)).Intersect(src.Bounds())
+		} else {
+			die(err)
+			rect = inkBounds(fragment).Inset(-int(pxmm * 2)).Intersect(fragment.Bounds())
+		}
 		sub := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
-		draw.Draw(sub, sub.Bounds(), src, rect.Min, draw.Src)
+		draw.Draw(sub, sub.Bounds(), fragment, rect.Min, draw.Src)
 		f := "sch-" + name + ".png"
 		die(writePNG(filepath.Join(out, f), sub))
 		in.Figs[name] = f
-		// масштаб 1:1 по листу, не шире поля страницы
-		in.FigW[name] = math.Min(16.5, (r.X1-r.X0)/10*1.1)
+		in.FigW[name] = math.Min(16.5, float64(rect.Dx())/pxmm/10*1.1)
 	}
 	die(writePNG(filepath.Join(out, "sheet.png"), rotate90(src)))
 	in.Figs["sheet"] = "sheet.png"
@@ -262,12 +274,31 @@ func pz1(d *pz.Doc, p *variant.Params, st *variant.Student, sheetDir, out string
 	die(writePNG(filepath.Join(out, "func.png"), f1))
 	in.Figs["func"] = "func.png"
 	tr, tw, err := diag.TimingDiagrams(diag.Timing{TAVLL: 43, TLLAX: 48, TLLWL: 200, TRLRH: 400, TRLDV: 252, TRHDX: 0, TQVWH: 433, TWHQX: 33, TWLWH: 400,
-		MemRead: "OEL", MemWrite: "R/WL"}, font, fmm, stroke)
+		MemRead: "OEL", MemWrite: "R/WR"}, font, fmm, stroke)
 	die(err)
 	die(writePNG(filepath.Join(out, "tread.png"), tr))
 	die(writePNG(filepath.Join(out, "twrite.png"), tw))
 	in.Figs["tread"], in.Figs["twrite"] = "tread.png", "twrite.png"
 	pz.BuildPZ1(d, in)
+}
+
+// inkBounds обрезает белые поля отдельного рисунка без рамки.
+func inkBounds(img image.Image) image.Rectangle {
+	b := img.Bounds()
+	ink := image.Rectangle{Min: b.Max, Max: b.Min}
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, blue, _ := img.At(x, y).RGBA()
+			if r < 0xf000 || g < 0xf000 || blue < 0xf000 {
+				ink.Min.X, ink.Min.Y = min(ink.Min.X, x), min(ink.Min.Y, y)
+				ink.Max.X, ink.Max.Y = max(ink.Max.X, x+1), max(ink.Max.Y, y+1)
+			}
+		}
+	}
+	if ink.Empty() {
+		return b
+	}
+	return ink
 }
 
 func readPNG(path string) (image.Image, error) {

@@ -72,7 +72,8 @@ for attempt in $(seq 1 12); do
     # всё, кроме исходника pandoc (*.md), но с отчётом
     flat() { find "$1" -maxdepth 1 -type f \( ! -name '*.md' -o -name report.md \) -exec cp {} "$2/" \; ; }
     case "$kind" in
-      СХЕМА) for f in "${keep[@]}"; do [ -f "$d/$f" ] && cp "$d/$f" "$out/"; done ;;
+      СХЕМА) for f in "${keep[@]}"; do [ -f "$d/$f" ] && cp "$d/$f" "$out/"; done
+             for f in "$d"/fragment-*.png; do [ ! -f "$f" ] || cp "$f" "$out/"; done ;;
       ПЗ1)   flat "$d/pz1" "$out" ;;
       ПЗ2)   [ -d "$d/pz2" ] && flat "$d/pz2" "$out"
              if [ -d "$d/code" ]; then mkdir -p "$out/программы" && flat "$d/code" "$out/программы"; fi ;;

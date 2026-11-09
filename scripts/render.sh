@@ -8,6 +8,14 @@ ws=()
 [ -f "$d/ramka.kicad_wks" ] && ws=(--drawing-sheet "$d/ramka.kicad_wks")
 kicad-cli sch export pdf -b "${ws[@]}" -o "$d/schematic.pdf" "$d/schematic.kicad_sch"
 pdftoppm -png -r 300 -singlefile "$d/schematic.pdf" "$d/schematic"
+for sch in "$d"/fragment-*.kicad_sch; do
+  [ -f "$sch" ] || continue
+  base="${sch%.kicad_sch}"
+  cp "$d/schematic.kicad_pro" "$base.kicad_pro"
+  kicad-cli sch export pdf -b -e -o "$base.pdf" "$sch" >/dev/null
+  pdftoppm -png -r 300 -singlefile "$base.pdf" "$base"
+  rm -f "$base.pdf" "$base.kicad_pro"
+done
 rm -f "$d"/~*.lck "$d/erc.rpt"
 kicad-cli sch erc -o "$d/erc.rpt" "$d/schematic.kicad_sch" || true
 grep -o "^\[[a-z_]*\]" "$d/erc.rpt" | sort | uniq -c > "$d/erc-summary.txt" || true

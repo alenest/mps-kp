@@ -921,6 +921,7 @@ func (b *builder) power() {
 	ce := b.Sym("C_Polarized", b.next("C"), "470 мк", Pt{x, (yv + yg) / 2}, SymOpt{
 		RefAt: ptr(Pt{x - 2.54, (yv+yg)/2 - 1.27}), RefJust: "right", // слева: справа — первый фильтр
 		ValAt: ptr(Pt{x - 2.54, (yv+yg)/2 + 1.27}), ValJust: "right"})
+	b.role("filter0", ce)
 	b.Wire(Pt{x, yv}, ce.Pin("1"))
 	b.Wire(ce.Pin("2"), Pt{x, yg})
 	b.Wire(Pt{x, yg}, Pt{x, yg + 1.27})
@@ -940,6 +941,7 @@ func (b *builder) power() {
 		c := b.Sym("C", b.next("C"), b.v.Filter, Pt{cx, (yv + yg) / 2}, SymOpt{
 			RefAt: ptr(Pt{cx + 0.635, (yv+yg)/2 - 2.54}), RefJust: "left", ValAt: ptr(Pt{cx + 0.635, (yv+yg)/2 + 2.54}), ValJust: "left"})
 		b.filterCs = append(b.filterCs, c)
+		b.role(fmt.Sprintf("filter%d", i+1), c)
 		b.Wire(Pt{cx, yv}, c.Pin("1"))
 		b.Wire(c.Pin("2"), Pt{cx, yg})
 	}
@@ -1211,7 +1213,7 @@ func (b *builder) buses26() {
 	b.Bus(Pt{xBM, yH1}, Pt{xBK, yH1}, Pt{xBK, 177.8})
 	b.Bus(Pt{xBM, yH2}, Pt{xR26, yH2})
 	b.Bus(Pt{xBD, yH2}, Pt{xBD, 218.44})
-	b.Bus(Pt{xBY, 69.85}, Pt{xBY, yH2}) // выше дешифратора — к вентилю CE левого порта IDT7005
+	b.Bus(Pt{xBY, 69.85}, Pt{xBY, yH2})  // выше дешифратора — к вентилю CE левого порта IDT7005
 	b.Bus(Pt{xR26, 38.1}, Pt{xR26, yH2}) // кончается на yH2 — Т-образно, без креста (Михалин 19.10: «крестообразное пересечение шин — отсутствие соединений»)
 }
 

@@ -496,7 +496,9 @@ func abs(f float64) float64 {
 }
 
 // String — готовый файл .kicad_sch.
-func (s *Sheet) String() string {
+func (s *Sheet) String() string { return s.drawing().String() }
+
+func (s *Sheet) drawing() *Node {
 	s.splitWires()
 	s.autoJunctions()
 	s.emitBuses()
@@ -534,7 +536,7 @@ func (s *Sheet) String() string {
 	root.Kids = append(root.Kids, s.items...)
 	root.Kids = append(root.Kids, L("sheet_instances", L("path", Q("/"), L("page", Q("1")))))
 	root.Kids = append(root.Kids, L("embedded_fonts", A("no")))
-	return root.String()
+	return root
 }
 
 func (s *Sheet) paperNode() *Node {
