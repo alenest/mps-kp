@@ -223,6 +223,7 @@ func (b *builder) tap(pin Pt, busX float64, name string, side int) {
 		}
 		b.Wire(pin, k, Pt{k.X, yb}, Pt{e.X, yb})
 		e = Pt{e.X, yb}
+		lab = k // метка — на изгибе: при сдвинутом входе точка у шины уже не лежит на проводе (ERC: label_dangling)
 	} else {
 		b.Wire(pin, e)
 	}
