@@ -192,7 +192,7 @@ func schematic(p *variant.Params, st *variant.Student, out, libPath, wksPath str
 		Style:    schgen.PickStyle(st.Style, fmt.Sprintf("%s|%d", st.GroupFull, p.M)),
 		Date:     st.Date, Student: st.Name, Checker: st.Checker,
 	}
-	if !plainSheet {
+	if !plainSheet && !st.Plain {
 		j := schgen.MakeJitter(fmt.Sprintf("%s|%d", st.GroupFull, p.M), p.Rows)
 		v.Jitter = &j
 	}

@@ -123,6 +123,7 @@ type Student struct {
 	Checker   string `yaml:"checker"` // «Михалин С.Н.»
 	Date      string `yaml:"date"`
 	Style     string `yaml:"style"`    // вид листа A|B|C|D; пусто — «авто» по группе и варианту
+	Plain     bool   `yaml:"plain"`    // true — без «почерка» (сдвигов и вариаций шрифтов), как эталон: лист совпадает с принятым вручную
 	PZStyle   string `yaml:"pz_style"` // вид ПЗ A|B|C; пусто — по группе и варианту
 	Path      string `yaml:"-"`        // откуда загружен (students/<ник>/variant.yaml); пусто — из флагов
 }
