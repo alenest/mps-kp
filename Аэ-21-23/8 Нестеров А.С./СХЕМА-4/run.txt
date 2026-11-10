@@ -1,0 +1,4 @@
+СХЕМА-4
+workflow: КМ-1 схема и перечень, запуск https://github.com/alenest/mps-kp/actions/runs/42817765153
+коммит: 6fba7fa19d46b21d56e2bddaaf06fe3c4860276a
+дата: 2026-11-10 12:58 UTC
