@@ -58,7 +58,7 @@ func peRows(lines []BOMLine) []peItem {
 		if len([]rune(l.Note)) > peNoteMax {
 			note = wrap(l.Note, peNoteMax+6) // две строчки мелким шрифтом в одной клетке
 		}
-		refs := wrapRefs(l.Refs, 11) // «DD3, DD8,» / «DD11» — в графе обозначения не теснится (как у принятого листа Казарина)
+		refs := wrapRefs(l.Refs, 24) // графа обозначения 20 мм: «DD3, DD9, DD11» (12,3 мм) помещается одной строкой
 		for k := 0; k < max(len(names), len(refs)); k++ {
 			r := peItem{}
 			if k < len(names) {

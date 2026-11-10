@@ -34,8 +34,14 @@ func RenderPDF(docx, pdf string) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	// свой профиль — иначе параллельный или открытый LibreOffice мешает
-	cmd := exec.Command(so, "-env:UserInstallation=file://"+filepath.ToSlash(filepath.Join(tmp, "profile")), "--headless",
+	// свой профиль — иначе параллельный или открытый LibreOffice мешает.
+	// На Windows путь вида C:/... после префикса file:// даёт file://C:/... — LibreOffice считает C: хостом,
+	// поэтому добавляем ведущий слэш: file:///C:/...
+	profile := filepath.ToSlash(filepath.Join(tmp, "profile"))
+	if !strings.HasPrefix(profile, "/") {
+		profile = "/" + profile
+	}
+	cmd := exec.Command(so, "-env:UserInstallation=file://"+profile, "--headless",
 		"--convert-to", "pdf", "--outdir", tmp, docx)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("LibreOffice: %v: %s", err, out)
@@ -61,7 +67,7 @@ func FillTOCPages(d *Doc, docx string) error {
 	if err := RenderPDF(docx, pdf); err != nil {
 		return err
 	}
-	txt, err := exec.Command("pdftotext", "-layout", pdf, "-").Output()
+	txt, err := exec.Command("pdftotext", "-enc", "UTF-8", "-layout", pdf, "-").Output()
 	if err != nil {
 		return fmt.Errorf("pdftotext: %v", err)
 	}

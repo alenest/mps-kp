@@ -10,11 +10,14 @@ import (
 // Только оформление и номиналы/типы — связи (электрику) так не меняют: их правят в построителе для всех.
 // Обозначения — как на листе (после нумерации по ГОСТ): посмотреть их можно в СХЕМА-N/sheet.json (refs, bom).
 type Fixes struct {
-	Values   map[string]string     `yaml:"values"`    // значение на листе: R10: "300", C16: "330 н", DD4: "74HC573"
-	BOMNames map[string]string     `yaml:"bom_names"` // наименование в перечне целиком: R10: "С2-33Н-0,125 300 Ом ±5 %"
-	BOMNotes map[string]string     `yaml:"bom_notes"` // «Примечание» в перечне: DD8: "Двухпортовое ОЗУ 8К×8"
-	NoteAdd  []string              `yaml:"note_add"`  // строки в конец «Примечания» на листе (номер ставится сам)
-	Move     map[string][2]float64 `yaml:"move"`      // сдвиг, мм [вправо, вниз]: note, power, sheet
+	Values     map[string]string     `yaml:"values"`      // значение на листе: R10: "300", C16: "330 н", DD4: "74HC573"
+	BOMNames   map[string]string     `yaml:"bom_names"`   // наименование в перечне целиком: R10: "С2-33Н-0,125 300 Ом ±5 %"
+	BOMNotes   map[string]string     `yaml:"bom_notes"`   // «Примечание» в перечне: DD8: "Двухпортовое ОЗУ 8К×8"
+	NoteAdd    []string              `yaml:"note_add"`    // строки в конец «Примечания» на листе (номер ставится сам)
+	Move       map[string][2]float64 `yaml:"move"`        // сдвиг, мм [вправо, вниз]: note, power, sheet
+	HideValues bool                  `yaml:"hide_values"` // не писать номиналы R/C/ZQ на листе (КМ-1; появятся в КМ-2)
+	WireWidth  *float64              `yaml:"wire_width"`  // толщина проводов, мм (пусто — как в стиле)
+	BusWidth   *float64              `yaml:"bus_width"`   // толщина шин, мм (пусто — как в стиле)
 }
 
 var moveKeys = map[string]bool{"note": true, "power": true, "sheet": true} // dec — дешифратор теперь в столбце защёлок, не двигается

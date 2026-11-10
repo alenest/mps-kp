@@ -64,26 +64,32 @@ const (
 	// правая верхняя часть (IDT7005, её шины, разъёмы XS2/XS3) сдвинута вправо на dxR: освобождено место под столбец регистра Y2,
 	// а дешифратор встал в столбец защёлок под защёлкой адреса (как на рис. Прил. А методички; замечание руководителя 06.10.2026 —
 	// «нумерация элементов»: дешифратор справа сверху получал последний номер)
-	dxR = 43.18
-	// блок индикатора (регистр, резисторы, HG1) правее на dxInd: центр регистра — под центром IDT7005, вентили ИЛИ-НЕ и ИЛИ — один столбец
-	dxInd = 5.08
-	xBI   = 171.45 + dxR // шина слева от IDT7005
-	xBR   = 231.14 + dxR // шина справа от IDT7005
-	xBY   = 165.1        // шина данных регистра Y2 и выходов дешифратора (от шины yH2 вверх)
-	xY2B  = 208.28       // шина выходов регистра Y2 (вниз и вправо под IDT7005 к XS3)
-	yH1   = 127.0        // шина под МК к клавиатуре
-	xBK   = 22.86        // шина к регистру столбцов
-	yH2   = 138.43       // шина к нижнему правому блоку
-	xBD   = 195.58       // вертикальная шина нижнего правого блока
+	dxR    = 43.18
+	xBI    = 171.45 + dxR // шина слева от IDT7005
+	xBR    = 231.14 + dxR // шина справа от IDT7005
+	xBY    = 165.1        // шина адресов DD3, данных DD8 и LdY2 (от шины yH2 вверх)
+	xY2B   = 208.28       // шина выходов регистра Y2 (вниз и вправо под IDT7005 к XS3)
+	yH1    = 127.0        // шина под МК к клавиатуре
+	xBK    = 22.86        // шина к регистру столбцов
+	yH2    = 138.43       // шина к нижнему правому блоку
+	xBD    = 195.58       // вертикальная шина нижнего правого блока
+	xBDind = 269.24       // индикатор подключён к главной шине слева от DD10 (замечание Михалина 24.10: «шина справа от DD10 — зачем?»)
 )
+
+const rdbufX, rdbufY = 195.58, 60.96
+
+// dxInd — сдвиг блока индикатора. В ТЗ-2026 он правее (столбец DD11, как в v2/v3); в ТЗ-2025 — как в HEAD,
+// иначе регистр верхнего правого угла наезжает на шину разъёма XS2 (проверка TestNetlist).
+var dxInd = 5.08
 
 type builder struct {
 	*Sheet
-	v        Variant
-	connBase map[string]int
-	refs     map[string]int
-	filterCs []*Comp
-	busIn    map[[2]int64]int // занятые точки входа в вертикальные шины: сторона (+1/−1)
+	v          Variant
+	connBase   map[string]int
+	refs       map[string]int
+	filterCs   []*Comp
+	busIn      map[[2]int64]int // занятые точки входа в вертикальные шины: сторона (+1/−1)
+	hideValues bool
 }
 
 // gostSyms — символы, у которых есть ГОСТ-вариант «_G» (cmd/mpslib/gost.go).
@@ -94,6 +100,9 @@ var passiveSyms = map[string]bool{"R": true, "C": true, "C_Polarized": true, "Cr
 
 // showValues — номиналы R, C, ZQ на листе: у всех, кроме руководителя, который просил их не писать (Гольцов 08.10.2026).
 func (b *builder) showValues() bool {
+	if b.hideValues {
+		return false
+	}
 	return b.v.Decoder && !strings.Contains(b.v.Checker, "Гольцов") // ТЗ-2025 (архив) — без изменений
 }
 
@@ -160,8 +169,44 @@ func mcuPin(p string) string {
 // A8, AD0 — названия сигналов … на прогоне где-то посередине проводника»).
 func (b *builder) tapRight(pin Pt, busX float64, name string) { b.tap(pin, busX, name, -1) }
 
+// tapRightClose — обход занятой точки шины с изломом у самой шины (2,54 мм),
+// без «лесенки» в свободном поле.
+func (b *builder) tapRightClose(pin Pt, busX float64, name string) {
+	e := Pt{busX - 2.54, pin.Y}
+	b.Wire(pin, e)
+	b.BusEntry(e, 2.54, 2.54)
+	b.Label(name, e, true)
+}
+
 // tapLeft: вывод справа от шины busX.
 func (b *builder) tapLeft(pin Pt, busX float64, name string) { b.tap(pin, busX, name, +1) }
+
+// tapLeftClose — обход занятой точки шины с изломом у самой шины (2,54 мм).
+func (b *builder) tapLeftClose(pin Pt, busX float64, name string) {
+	e := Pt{busX + 2.54, pin.Y}
+	b.Wire(pin, e)
+	b.BusEntry(Pt{busX, e.Y + 2.54}, 2.54, -2.54)
+	b.VLabel(name, e)
+}
+
+// tapLeftV: как tapLeft, но метка вынесена влево от шины — у длинных имён не наезжает на корпус вентиля справа.
+func (b *builder) tapLeftV(pin Pt, busX float64, name string) {
+	// короткий отвод: метка стоит левее шины и не наезжает на номер вывода
+	e := Pt{busX + 2.54, pin.Y}
+	yb := b.busY(busX, pin.Y, +1)
+	if yb != pin.Y {
+		k := Pt{busX + 5.08, pin.Y}
+		if math.Abs(pin.X-busX) < 5.08+0.01 {
+			k = e
+		}
+		b.Wire(pin, k, Pt{k.X, yb}, Pt{e.X, yb})
+		e = Pt{e.X, yb}
+	} else {
+		b.Wire(pin, e)
+	}
+	b.BusEntry(Pt{busX, e.Y + 2.54}, 2.54, -2.54)
+	b.VLabel(name, Pt{e.X, e.Y})
+}
 
 // tap: side = +1 — вывод справа от шины, −1 — слева. Если с другой стороны в этой точке шины уже есть вход, вход сдвигается
 // по вертикали на 1,27 (иначе два входа напротив читаются как провод, пересекающий шину — замечание Гольцова: «A15–AD4»).
@@ -178,7 +223,6 @@ func (b *builder) tap(pin Pt, busX float64, name string, side int) {
 		}
 		b.Wire(pin, k, Pt{k.X, yb}, Pt{e.X, yb})
 		e = Pt{e.X, yb}
-		lab = k
 	} else {
 		b.Wire(pin, e)
 	}
@@ -233,6 +277,10 @@ func (b *builder) icLabels(vccTip Pt) SymOpt {
 
 // Build собирает лист Э3 под вариант.
 func Build(lib *Lib, v Variant, seed string) *Sheet {
+	dxInd = 5.08
+	if v.Decoder {
+		dxInd = 71.12
+	}
 	b := &builder{Sheet: NewSheet(lib, seed), v: v, refs: map[string]int{}}
 	b.Roles = map[string]*Comp{}
 	b.Sheet.J = Plain
@@ -242,6 +290,15 @@ func Build(lib *Lib, v Variant, seed string) *Sheet {
 	if v.Fixes != nil {
 		b.Sheet.Fixes = v.Fixes
 		b.FixErrs = append(b.FixErrs, v.Fixes.applyMoves(&b.Sheet.J)...)
+		if v.Fixes.HideValues {
+			b.hideValues = true
+		}
+		if v.Fixes.WireWidth != nil {
+			b.Sheet.J.WireW = *v.Fixes.WireWidth
+		}
+		if v.Fixes.BusWidth != nil {
+			b.Sheet.J.BusW = *v.Fixes.BusWidth
+		}
 	}
 	if b.v.Style.Name == "" {
 		b.v.Style = Styles["A"]
@@ -374,8 +431,8 @@ func (b *builder) reset(u *Comp) {
 	// обозначения — над конденсаторами (ГОСТ: сверху или справа; раньше «C2» стояло между ними — замечание Михалина)
 	ca := b.Sym("C", b.next("C"), "30 п", Pt{31.75, top.Y}, SymOpt{Rot: 90,
 		RefAt: ptr(Pt{31.75, top.Y - 3.048}), RefJust: "center", ValAt: ptr(Pt{31.75, top.Y + 3.048}), ValJust: "center"})
-	// C3 — на 5,08 ниже вывода кварца: между C2 и C3 помещаются номинал C2 и обозначение C3, не путаясь
-	cbY := bot.Y + 5.08
+	// C3 — у вывода кварца (v2/v3): номиналы на листе КМ-1 не пишем, разнос не нужен
+	cbY := bot.Y
 	cb := b.Sym("C", b.next("C"), "30 п", Pt{31.75, cbY}, SymOpt{Rot: 90,
 		RefAt: ptr(Pt{31.75, cbY - 3.048}), RefJust: "center", ValAt: ptr(Pt{33.02, cbY + 3.048}), ValJust: "center"})
 	b.role("zq", zq)
@@ -400,11 +457,23 @@ func ptr(p Pt) *Pt { return &p }
 // ---------------------------------------------------------------- защёлка адреса DD4
 
 func (b *builder) latch573(ref string, at Pt) *Comp {
+	return b.latch573OE(ref, at, false)
+}
+
+// latch573OE — защёлка; gndAtPin ставит землю OE прямо на вывод (у DD11: иначе провод OE→GND
+// пересекает выход вентиля DD5.2), иначе — с отводом влево, как у DD3/DD8.
+func (b *builder) latch573OE(ref string, at Pt, gndAtPin bool) *Comp {
 	u := b.Sym("74HC573", ref, "74AC573", at, b.icLabels(Pt{at.X, at.Y - 20.32}))
 	b.vcc(u.Pin("20"))
 	b.gnd(u.Pin("10"))
 	// OE → GND
 	oe := u.Pin("1")
+	if gndAtPin {
+		// земля ниже вывода: планки знака GND не пересекают провод к C
+		b.Wire(oe, Pt{oe.X, oe.Y + 10.16})
+		b.gnd(Pt{oe.X, oe.Y + 10.16})
+		return u
+	}
 	b.Wire(oe, Pt{oe.X - 2.54, oe.Y}, Pt{oe.X - 2.54, oe.Y + 1.27})
 	b.gnd(Pt{oe.X - 2.54, oe.Y + 1.27})
 	return u
@@ -412,9 +481,15 @@ func (b *builder) latch573(ref string, at Pt) *Comp {
 
 func (b *builder) addrLatch() {
 	u := b.role("latchA", b.latch573("DD4", Pt{142.24, 57.15})) // на полшага ниже рядов МК и IDT: входы в шины не встают напротив друг друга
+	// ТЗ-2026: выходы Q0–Q7 идут в уже существующую шину xBY (между дешифратором и IDT),
+	// продлённую вверх до DD3: длинные провода через весь лист не нужны.
+	busX := xBI
+	if b.v.Decoder {
+		busX = xBY
+	}
 	for i := 0; i < 8; i++ {
 		b.tapLeft(u.Pin(strconv.Itoa(2+i)), xBM, fmt.Sprintf("AD%d", i))
-		b.tapRight(u.Pin(strconv.Itoa(19-i)), xBI, fmt.Sprintf("A%d", i))
+		b.tapRight(u.Pin(strconv.Itoa(19-i)), busX, fmt.Sprintf("A%d", i))
 	}
 	b.tapLeft(u.Pin("11"), xBM, nALE)
 }
@@ -422,24 +497,26 @@ func (b *builder) addrLatch() {
 // ---------------------------------------------------------------- регистр Y2 DD5 + DD1.2
 
 func (b *builder) y2Reg() {
-	u := b.role("latchY2", b.latch573("DD5", Pt{185.42, 109.22}))
+	// сдвиг на 1,27 относительно сетки выводов IDT7005: выходы регистра входят в шину xBI строго
+	// горизонтально, не вставая напротив выводов DD10 (иначе появляется «ступенька» — замечание 28.10.2026)
+	atY := 109.22
+	if b.v.Decoder {
+		atY = 110.49
+	}
+	u := b.role("latchY2", b.latch573("DD5", Pt{185.42, atY}))
 	for i := 0; i < 8; i++ {
 		b.tapLeft(u.Pin(strconv.Itoa(2+i)), xBY, fmt.Sprintf("AD%d", i))
 		q := u.Pin(strconv.Itoa(19 - i))
-		if b.v.Decoder {
-			// прямо в шину слева от IDT7005 — она рядом (Михалин: «длина шин минимально возможная — зачем тянем от XS2 к DD8»);
-			// у выводов все восемь линий одинаково сдвинуты на 1,27: у шины они встают между рядами IDT7005 — без ступенек у входа
-			k := Pt{q.X + 2.54, q.Y}
-			b.Wire(q, k, Pt{k.X, q.Y + 1.27})
-			b.tapRight(Pt{k.X, q.Y + 1.27}, xBI, fmt.Sprintf("Y2_%d", i))
+		if !b.v.Decoder {
+			b.tapRight(q, xY2B, fmt.Sprintf("Y2_%d", i))
 			continue
 		}
-		b.tapRight(q, xY2B, fmt.Sprintf("Y2_%d", i))
+		b.tapRight(q, xBI, fmt.Sprintf("Y2_%d", i))
 	}
 	// Load = ИЛИ-НЕ(CSy2, WR): вентиль в столбце защёлок под дешифратором, входы — с шины у МК, выход через шину xBY к Load
 	ld := u.Pin("11")
-	// ниже Load на 7,62: над вентилем — земля дешифратора, между ними ≥ 2,5 мм (иначе «пересечение УГО», как DD3.1/C2)
-	gy := ld.Y + 7.62
+	// ниже Load на 5,08 (v2/v3): над вентилем — земля дешифратора, между ними ≥ 2,5 мм
+	gy := ld.Y + 5.08
 	g := b.role("norY2", b.Sym("74HC02", "DD1", "74HC02", Pt{147.32, gy}, SymOpt{Unit: 1,
 		RefAt: ptr(Pt{147.32, gy - 6.6}), RefJust: "left", HideVal: true})) // над вентилем, правее земли дешифратора
 	// выход — через шину xBY (вход и выход шины на разной высоте), а не проводом поперёк неё (проверка листов 09.10.2026)
@@ -610,7 +687,7 @@ func (b *builder) placeConnXY() {
 		p := cp(c, 1+i)
 		b.Wire(p, Pt{bx2 + 2.54, p.Y})
 		b.BusEntry(Pt{bx2, p.Y + 2.54}, 2.54, -2.54)
-		b.Label(n, Pt{bx2 + 2.54, p.Y}, false)
+		b.Label(n, Pt{bx2 + 5.08, p.Y}, false)
 		lastY = p.Y
 	}
 	gp := cp(c, 1+len(names))
@@ -627,7 +704,7 @@ func (b *builder) placeConnXY() {
 		p := cp(c, 3+i)
 		b.Wire(p, Pt{bx + 2.54, p.Y})
 		b.BusEntry(Pt{bx, p.Y + 2.54}, 2.54, -2.54)
-		b.Label(fmt.Sprintf("Y2_%d", i), Pt{bx + 2.54, p.Y}, false)
+		b.Label(fmt.Sprintf("Y2_%d", i), Pt{bx + 5.08, p.Y}, false)
 	}
 	gp = cp(c, 11)
 	b.Wire(gp, Pt{gp.X - 1.27, gp.Y}, Pt{gp.X - 1.27, gp.Y + 1.27})
@@ -649,14 +726,14 @@ func keyLegend(cols, rows int) [][]string {
 }
 
 const (
-	kbX0    = 78.74  // первый столбец (вся клавиатура левее на 5,08: справа от C строк — их обозначение и номинал)
+	kbX0    = 83.82  // первый столбец (v2/v3: клавиатура правее на 5,08, как на присланном листе)
 	kbDX    = 12.7   // шаг столбцов
 	kbRow0  = 182.88 // первая строка
 	kbDY    = 12.7
-	kbVcc   = 68.58 // вертикаль +5 В подтяжек
-	kbPull  = 72.39
-	kbRser  = 133.35
-	kbC     = 138.43 // до вертикали строк 8,89 мм: метка «RowN» между точками, справа от C — его обозначение и номинал
+	kbVcc   = 73.66  // вертикаль +5 В подтяжек
+	kbPull  = 77.47  // v2/v3: подтяжка и R строки левее, номиналы не пишем на листе КМ-1
+	kbRser  = 135.89 // v2/v3
+	kbC     = 140.97 // v2/v3: до вертикали строк 6,35 мм
 	kbRowX0 = 147.32 // вертикали строк к 244 и «И» (шаг 2,54: «расстояние между проводниками не менее 2 мм», лекция ч1 с. 10)
 	kbColY  = 154.94
 )
@@ -666,7 +743,7 @@ func (b *builder) rowY(r int) float64 { return kbRow0 + float64(r)*b.Sheet.J.KbD
 func (b *builder) keyboard() {
 	v := b.v
 	// DD2 74HC173 — столбцы
-	at := Pt{53.34, 157.48} // левее: правый край корпуса не под «+5V» подтяжек (клавиатура сдвинута влево под номиналы)
+	at := Pt{60.96, 157.48} // v2/v3: правый край корпуса не под «+5V» подтяжек
 	u := b.role("kb173", b.Sym("74HC173", "DD2", "74HC173", at, b.icLabels(Pt{at.X, at.Y - 22.86})))
 	b.vcc(u.Pin("16"))
 	b.gnd(u.Pin("8"))
@@ -824,19 +901,15 @@ func (b *builder) rowsAndInt() {
 		}
 	}
 
-	// 1OE, 2OE ← ИЛИ(CSkb, RD): чтение строк только при обращении к клавиатуре
-	// вентиль отодвинут от шины: метка ~{CS_kbd} у входа в шину не наезжает на номер вывода
-	orU, orA, orB, orY := 1, "1", "2", "3"
-	if v.Decoder { // ТЗ-2026: часть 1 — CE левого порта IDT7005 (выше и левее), эта — вторая
-		orU, orA, orB, orY = 2, "4", "5", "6"
-	}
-	g := b.role("or", b.Sym("74HC32", "DD9", "74HC32", Pt{218.44, 213.36}, SymOpt{Unit: orU,
+	// 1OE, 2OE ← ИЛИ(CSkb, RD): чтение строк только при обращении к клавиатуре.
+	// В ТЗ-2026 первая часть DD9 занята RD_buf (CE левого порта IDT7005), поэтому здесь — вторая.
+	g := b.role("or", b.Sym("74HC32", "DD9", "74HC32", Pt{218.44, 213.36}, SymOpt{Unit: 2,
 		RefAt: ptr(Pt{215.9, 207.01}), RefJust: "left", HideVal: true}))
-	b.tapLeft(g.Pin(orA), xBD, nCSkb)
-	b.tapLeft(g.Pin(orB), xBD, nRD)
-	o := g.Pin(orY)
+	b.tapLeft(g.Pin("4"), xBD, nCSkb)
+	b.tapLeft(g.Pin("5"), xBD, nRD)
+	o := g.Pin("6")
 	oe1, oe2 := u.Pin("1"), u.Pin("19")
-	loopY := max(220.98, b.rowY(v.Rows-1)+5.08) // ниже выхода DD9.1 и последней строки клавиатуры
+	loopY := max(220.98, b.rowY(v.Rows-1)+5.08) // ниже выхода DD9.2 и последней строки клавиатуры
 	b.Wire(o, Pt{228.6, o.Y}, Pt{228.6, loopY}, Pt{157.48, loopY}, Pt{157.48, oe1.Y}, oe1)
 	b.Wire(Pt{157.48, oe2.Y}, oe2)
 }
@@ -844,20 +917,39 @@ func (b *builder) rowsAndInt() {
 // ---------------------------------------------------------------- индикатор: DD10 + DD1.3 + R + HG1
 
 func (b *builder) indicator() {
-	at := Pt{238.76 + dxInd, 171.45} // центр — как у IDT7005 над ним: один столбец, нумерация однозначна
-	u := b.role("latchInd", b.latch573("DD10", at))
+	// ТЗ-2026: регистр индикатора — в освободившемся верхнем правом столбце (как DD11 в v2/v3),
+	// резисторы R8–R15 и HG1 остаются в нижнем правом блоке, чтобы не ломать раскладку.
+	// ТЗ-2025: прежнее место (иначе верхний регистр наезжает на шину разъёма XS2).
+	atY := 171.45
+	if b.v.Decoder {
+		atY = 166.37 // на уровне HG1: регистр стоит слева от R8–R15, а не над ними
+	}
+	at := Pt{238.76 + dxInd, atY}
+	u := b.role("latchInd", b.latch573OE("DD10", at, b.v.Decoder))
+	busX := xBD
+	if b.v.Decoder {
+		busX = xBDind
+	}
 	for i := 0; i < 8; i++ {
-		b.tapLeft(u.Pin(strconv.Itoa(2+i)), xBD, fmt.Sprintf("AD%d", i))
+		b.tapLeft(u.Pin(strconv.Itoa(2+i)), busX, fmt.Sprintf("AD%d", i))
 	}
 	ld := u.Pin("11")
-	// ниже Load на 5,08: иначе верхняя грань вентиля ложится на провод D7 (замечание Михалина: «пересечения УГО, см. DD3.1»)
-	gy := ld.Y + 5.08
-	g := b.role("norInd", b.Sym("74HC02", "DD1", "74HC02", Pt{ld.X - 15.24, gy}, SymOpt{Unit: 2, // центр — под вентилем ИЛИ DD9: один столбец
+	// ниже Load на 5,08 (ТЗ-2025) / 10,16 (ТЗ-2026): верхняя грань вентиля не ложится на провод D7
+	gy, gx := ld.Y+5.08, ld.X-15.24
+	if b.v.Decoder {
+		gy, gx = ld.Y+10.16, ld.X-10.16
+	}
+	g := b.role("norInd", b.Sym("74HC02", "DD1", "74HC02", Pt{gx, gy}, SymOpt{Unit: 2, // центр — под вентилем ИЛИ DD9: один столбец
 		RefAt: ptr(Pt{ld.X - 20.32, gy - 6.6}), RefJust: "left", HideVal: true})) // над вентилем
 	o := g.Pin("4")
-	b.Wire(o, Pt{o.X, ld.Y}, ld) // излом сразу у выхода: до провода OE→земля регистра ≥ 2,54
-	b.tapLeft(g.Pin("5"), xBD, nCSind)
-	b.tapLeft(g.Pin("6"), xBD, nWR)
+	b.Wire(o, Pt{o.X, ld.Y}, ld) // земля OE опущена ниже вывода — провод к C её не пересекает
+	if b.v.Decoder {
+		b.tapLeftV(g.Pin("5"), busX, nCSind)
+		b.tapLeftV(g.Pin("6"), busX, nWR)
+	} else {
+		b.tapLeft(g.Pin("5"), busX, nCSind)
+		b.tapLeft(g.Pin("6"), busX, nWR)
+	}
 	b.indicatorOut(u, dxInd)
 }
 
@@ -870,10 +962,13 @@ func (b *builder) indicatorOut(u *Comp, dxInd float64) {
 		b.tapRight(q, xq, fmt.Sprintf("Q%d", i))
 	}
 	seg := []string{"a", "b", "c", "d", "e", "f", "g", "dp"}
-	y0 := 154.94 // на полшага (1,27) от выводов регистра и индикатора: входы в шины не встают напротив друг друга
+	y0 := 154.94 // резисторы и HG1 — в нижнем правом блоке (v2/v3)
 	pitch := 5.08
+	if b.v.Decoder {
+		pitch = 7.62 // место под номиналы КМ-2 (v2/v3); на листе КМ-1 значения скрыты
+	}
 	if b.showValues() {
-		pitch = 7.62 // номинал под резистором, обозначение следующего — над ним: шаг шире
+		pitch = 7.62
 	}
 	for i := 0; i < 8; i++ {
 		y := y0 + float64(i)*pitch
@@ -883,9 +978,15 @@ func (b *builder) indicatorOut(u *Comp, dxInd float64) {
 		b.tapLeft(r.Pin("1"), xq, fmt.Sprintf("Q%d", i)) // вход напротив выхода регистра сдвигается (busY)
 		b.tapRight(r.Pin("2"), xs, seg[i])
 	}
-	// шины продлены за крайние входы на 2,54: все входы Т-образные, не в конец шины (проверка листа 14.10.2026)
-	b.Bus(Pt{xq, 158.75}, Pt{xq, y0 + 2.54})
-	b.Bus(Pt{xq, y0 + 2.54}, Pt{xq, y0 + 7*pitch + 5.08})
+	// шины продлены за крайние входы на 2,54: все входы Т-образные, не в конец шины (проверка листа 14.10.2026).
+	if b.v.Decoder {
+		// начало — у верхнего Q регистра индикатора (v4.1), конец — на 2,54 ниже R15
+		qTop := u.Pin("19").Y
+		b.Bus(Pt{xq, qTop - 2.54}, Pt{xq, y0 + 7*pitch + 2.54})
+	} else {
+		b.Bus(Pt{xq, 158.75}, Pt{xq, y0 + 2.54})
+		b.Bus(Pt{xq, y0 + 2.54}, Pt{xq, y0 + 7*pitch + 5.08})
+	}
 	sym, val := "FYS-5612AX", "FYS-5612AX"
 	if b.v.Anode {
 		sym, val = "FYS-5612BX", "FYS-5612BX"
@@ -896,7 +997,11 @@ func (b *builder) indicatorOut(u *Comp, dxInd float64) {
 	for i, n := range pins {
 		b.tapLeft(hg.Pin(n), xs, seg[i])
 	}
-	b.Bus(Pt{xs, y0}, Pt{xs, y0 + 7*pitch + 5.08})
+	if b.v.Decoder {
+		b.Bus(Pt{xs, y0 - 2.54}, Pt{xs, y0 + 7*pitch + 2.54})
+	} else {
+		b.Bus(Pt{xs, y0}, Pt{xs, y0 + 7*pitch + 5.08})
+	}
 	c1, c2 := hg.Pin("3"), hg.Pin("8")
 	xc := c1.X + 2.54
 	b.Wire(c1, Pt{xc, c1.Y}, Pt{xc, c2.Y})
@@ -972,7 +1077,7 @@ func (b *builder) notes() {
 		"Примечания",
 		fmt.Sprintf("1. %s подключить в непосредственной близости от выводов питания микросхем DD1–DD%d.", refRanges(b.filterCs), len(b.filterCs)),
 		fmt.Sprintf("2. %s — вывод 7 на GND, вывод 14 к +5 В.", joinRefs(nor, and, or)),
-		fmt.Sprintf("3. Неиспользуемые входы к GND: %s%s выв. %s; %s выв. %s.", nor+" выв. 8, 9, 11, 12; ", and, andUnused, or, map[bool]string{false: "4, 5, 9, 10, 12, 13", true: "9, 10, 12, 13"}[b.v.Decoder]),
+		fmt.Sprintf("3. Входы %s (8, 9, 11, 12), %s (%s), %s (9, 10, 12, 13) подключить к GND.", nor, and, andUnused, or),
 		fmt.Sprintf("4. %s, %s устанавливать рядом с ZQ1.", b.Roles["cX1"].Ref, b.Roles["cX2"].Ref),
 	}
 	if b.Fixes != nil {
@@ -982,7 +1087,7 @@ func (b *builder) notes() {
 	}
 	if b.v.Decoder {
 		// «примечание д.б. выравнено по нижнему краю к рамке» (Михалин, 16.10.2026): нижняя строка — над основной надписью
-		b.TextBottom(strings.Join(lines, "\n"), Pt{229.87, 231.14}, b.Sheet.J.NoteFont) // левый край — по левому краю штампа
+		b.TextBottom(strings.Join(lines, "\n"), Pt{229.87, 236.2}, b.Sheet.J.NoteFont) // нижняя строка — по верхней линии штампа (замечание v1.5/19.10)
 		return
 	}
 	b.Text(strings.Join(lines, "\n"), Pt{229.87 + b.Sheet.J.NoteDX, 206.375 + b.notesDY() + b.Sheet.J.NoteDY}, b.Sheet.J.NoteFont)
@@ -1025,8 +1130,8 @@ func refRanges(cs []*Comp) string {
 // ---------------------------------------------------------------- дешифратор CS (ТЗ-2026, рис. 6)
 
 func (b *builder) decoder() {
-	// в столбце защёлок под защёлкой адреса (рис. Прил. А методички: DC рядом с RG); адрес и CS_EN — с шины у МК, выходы CS — на шину xBY
-	at := Pt{142.24, 102.87} // на полшага от рядов МК и регистра Y2 (входы в шины не напротив)
+	// в столбце защёлок под защёлкой адреса (рис. Прил. А методички: DC рядом с RG); адрес и CS_EN — с шины у МК, выходы CS — в шину xBY
+	at := Pt{142.24, 100.33} // исходное положение: входы A13–A15 входят в xBM без «лесенок»
 	u := b.role("dec", b.Sym("74HC138", "DD11", "74HC138", at, b.icLabels(Pt{at.X, at.Y - 15.24})))
 	b.vcc(u.Pin("16"))
 	b.gnd(u.Pin("8"))
@@ -1052,7 +1157,13 @@ func (b *builder) decoder() {
 			b.nc(p)
 			continue
 		}
-		b.tapRight(p, xBY, name)
+		// CS — в шину xBY. У Y3/Y7 точка шины занята входами DD8, но эти два провода
+		// специально оставлены прямыми (без «лесенки»); остальные — обычным Т-отводом.
+		if name == nCSkb || name == nCSbuf {
+			b.tapRightClose(p, xBY, name)
+		} else {
+			b.tapRight(p, xBY, name)
+		}
 	}
 }
 
@@ -1107,8 +1218,7 @@ func (b *builder) x2AddrLast() int {
 // попадает байт X2 с разъёма. M/S = 1 (одна микросхема — master), выходы BUSY и INT свободны (не на питании); на +5 В только
 // входы (R/WL, SEM, OER). Адресных линий — по объёму буфера V, старшие A обоих портов — на землю.
 const (
-	xR26  = 269.24 // шина справа от IDT7005
-	xCn26 = 281.94 // выводы разъёмов X2, Y — в 12,7 от шины
+	xR26 = 269.24 // шина справа от IDT7005; к ней подключены XS2 и XS3
 )
 
 func (b *builder) idt26(u *Comp) {
@@ -1116,16 +1226,16 @@ func (b *builder) idt26(u *Comp) {
 	if n <= 0 || n > 13 {
 		n = 13
 	}
-	// левый порт — МК, только чтение. CEL = ИЛИ(CS_buf, RD): в режиме master при одновременном обращении обоих портов к одной
-	// ячейке логика BUSY может заблокировать запись правого порта («Writes to the right port are internally ignored when BUSYR
-	// outputs are driving low», даташит IDT7005, табл. II, прим. 3). Левый порт выбран только при чтении — запись X2 правым
-	// портом по WR никогда не совпадает с обращением слева.
-	g := b.role("orBuf", b.Sym("74HC32", "DD9", "74HC32", Pt{185.42, 74.93}, SymOpt{Unit: 1,
-		RefAt: ptr(Pt{180.34, 68.33}), RefJust: "left", HideVal: true}))
-	b.tapLeft(g.Pin("1"), xBY, nCSbuf)
-	b.tapLeft(g.Pin("2"), xBY, nRD)
-	b.tapRight(g.Pin("3"), xBI, nRDbuf)
-	b.tapLeft(u.Pin("59"), xBI, nRDbuf)
+	// Левый порт — только чтение МК: CEL ← RD_buf = ИЛИ(CS_buf, RD), OEL ← RD, R/WL = +5 В.
+	// RD_buf — первая часть DD9 (пин 3), входы 1/2 — CS_buf и RD; так левый порт выбран только при чтении буфера.
+	// Вентиль стоит над DD8: входы — Т-отводами от xBY, выход — к xBI; отдельных «островов» и лесенок нет.
+	rd := b.role("orBuf", b.Sym("74HC32", "DD9", "74HC32", Pt{rdbufX, rdbufY}, SymOpt{Unit: 1,
+		RefAt: ptr(Pt{rdbufX, rdbufY - 7.62}), RefJust: "left", HideVal: true}))
+	for _, x := range []struct{ pin, name string }{{"1", nCSbuf}, {"2", nRD}} {
+		b.tapLeft(rd.Pin(x.pin), xBY, x.name)
+	}
+	b.tapRight(rd.Pin("3"), xBI, nRDbuf)
+	b.tapLeftV(u.Pin("59"), xBI, nRDbuf)
 	b.tapLeft(u.Pin("62"), xBI, nRD)
 	xl := u.Pin("61").X - 2.54
 	// R/WL, SEML, M/S → +5 В (входы): у каждого свой знак — общая вертикаль шла бы мимо свободных BUSY и INT, как будто и они на питании
@@ -1138,7 +1248,8 @@ func (b *builder) idt26(u *Comp) {
 	for i, p := range dl {
 		b.tapLeft(u.Pin(p), xBI, fmt.Sprintf("AD%d", i))
 	}
-	// правый порт — запись X2 по WR МК
+	// Правый порт — запись по сигналам МК: CER (22) ← CS_buf, R/WR (20) ← WR, OER=1 (чтение справа запрещено).
+	// Данные X2_0…7 по-прежнему приходят с разъёма XS2; строб X2 идёт только на INT1 и не управляет буфером.
 	xs := u.Pin("22").X + 2.54
 	b.tapRight(u.Pin("22"), xR26, nCSbuf)
 	b.tapRight(u.Pin("20"), xR26, nWR)
@@ -1172,7 +1283,9 @@ func (b *builder) idt26(u *Comp) {
 }
 
 func (b *builder) placeConn26() {
-	x2 := b.conn("xsX2", "x2", "CONN_X2", "XS2", Pt{xCn26, 40.64})
+	// XS2/XS3 — сразу справа от шины xR26 (шина правого порта DD10), без отдельной П-образной шины.
+	const xcn = 281.94
+	x2 := b.conn("xsX2", "x2", "CONN_X2", "XS2", Pt{xcn, 30.48})
 	names := []string{nX2stb}
 	for i := 0; i < 8; i++ {
 		names = append(names, fmt.Sprintf("X2_%d", i))
@@ -1182,21 +1295,30 @@ func (b *builder) placeConn26() {
 	}
 	// подтяжка строба к +5 В: при отключённом разъёме вход INT1 и CE/R/W правого порта не висят (ложные прерывания и записи)
 	sp := cp(x2, 1)
-	rx := xCn26 - 2.54 // у самого разъёма: провод к шине и метка ~{X2stb} левее
-	ru := b.role("rX2", b.Sym("R", b.next("R"), "10 к", Pt{rx, sp.Y - 6.35}, SymOpt{
-		RefAt: ptr(Pt{rx - 1.905, sp.Y - 7.62}), RefJust: "right", ValAt: ptr(Pt{rx - 1.905, sp.Y - 5.08}), ValJust: "right"}))
+	rx := xcn
+	ru := b.role("rX2", b.Sym("R", b.next("R"), "10 к", Pt{rx, sp.Y - 12.7}, SymOpt{
+		RefAt: ptr(Pt{rx + 3.81, sp.Y - 12.7}), RefJust: "left", ValAt: ptr(Pt{rx + 3.81, sp.Y - 10.16}), ValJust: "left"}))
 	b.vcc(ru.Pin("1"))
 	b.Wire(ru.Pin("2"), Pt{rx, sp.Y})
 	gp := cp(x2, 1+len(names))
 	b.Wire(gp, Pt{gp.X - 1.27, gp.Y}, Pt{gp.X - 1.27, gp.Y + 1.27})
 	b.gnd(Pt{gp.X - 1.27, gp.Y + 1.27})
 
-	c := b.conn("xsY", "y", "CONN_Y", "XS3", Pt{xCn26, 86.36})
+	c := b.conn("xsY", "y", "CONN_Y", "XS3", Pt{xcn, 102.87})
 	for i, n := range []string{nY1, nY2} {
-		b.tapLeft(cp(c, 1+i), xR26, n)
+		if n == nY2 {
+			b.tapLeftClose(cp(c, 1+i), xR26, n)
+		} else {
+			b.tapLeft(cp(c, 1+i), xR26, n)
+		}
 	}
 	for i := 0; i < 8; i++ {
-		b.tapLeft(cp(c, 3+i), xR26, fmt.Sprintf("Y2_%d", i))
+		n := fmt.Sprintf("Y2_%d", i)
+		if n == "Y2_1" {
+			b.tapLeftClose(cp(c, 3+i), xR26, n)
+		} else {
+			b.tapLeft(cp(c, 3+i), xR26, n)
+		}
 	}
 	gp = cp(c, 11)
 	b.Wire(gp, Pt{gp.X - 1.27, gp.Y}, Pt{gp.X - 1.27, gp.Y + 1.27})
@@ -1213,8 +1335,8 @@ func (b *builder) buses26() {
 	b.Bus(Pt{xBM, yH1}, Pt{xBK, yH1}, Pt{xBK, 177.8})
 	b.Bus(Pt{xBM, yH2}, Pt{xR26, yH2})
 	b.Bus(Pt{xBD, yH2}, Pt{xBD, 218.44})
-	b.Bus(Pt{xBY, 69.85}, Pt{xBY, yH2})  // выше дешифратора — к вентилю CE левого порта IDT7005
-	b.Bus(Pt{xR26, 38.1}, Pt{xR26, yH2}) // кончается на yH2 — Т-образно, без креста (Михалин 19.10: «крестообразное пересечение шин — отсутствие соединений»)
+	b.Bus(Pt{xBY, 40.64}, Pt{xBY, yH2})     // продлена вверх к DD3: Q0–Q7 входят короткими отводами
+	b.Bus(Pt{xR26, yTop}, Pt{xR26, 193.04}) // до DD5.2/DD11: входы индикатора и его Load — с той же шины, без «висячих» меток
 }
 
 // notesDY — «Примечания» ниже, если резисторы сегментов разнесены под номиналы (шаг 7,62).

@@ -1,2 +1,5 @@
+hide_values: true
+wire_width: 0.2
+bus_width: 0.7
 move:
   note: [0, 25.4]

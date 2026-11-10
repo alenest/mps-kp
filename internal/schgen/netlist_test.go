@@ -230,22 +230,23 @@ func expected(v Variant, roles map[string]*Comp) map[string][]string {
 			}
 		}
 	}
-	e["CSbuf"] = []string{mp(v.CS.Buf), r("idt", 59)}
-	if v.Decoder { // CER ← CS_buf; CEL = ИЛИ(CS_buf, RD) на DD9.2
+	if v.Decoder { // ТЗ-2026: CE_R ← CS_buf; CE_L ← RD_buf = ИЛИ(CS_buf, RD)
 		e["CSbuf"] = []string{mp(v.CS.Buf), r("idt", 22), r("orBuf", 1)}
 		e["RDbuf"] = []string{r("orBuf", 3), r("idt", 59)}
+	} else {
+		e["CSbuf"] = []string{mp(v.CS.Buf), r("idt", 59)}
 	}
 	e["CSy2"] = []string{mp(v.CS.Y2), r("norY2", 2)}
-	e["CSkb"] = []string{mp(v.CS.Kb), r("kb173", 9), r("kb173", 10), r("or", 1)}
+	e["CSkb"] = []string{mp(v.CS.Kb), r("kb173", 9), r("kb173", 10), r("or", 4)}
 	e["CSind"] = []string{mp(v.CS.Ind), r("norInd", 5)}
-	e["WR"] = []string{r("mcu", 16), r("norY2", 3), r("norInd", 6), r("kb173", 7), r("idt", 61)}
-	if v.Decoder { // методичка: R/WL = 1, R/WR ← WR
+	if v.Decoder { // ТЗ-2026: R/WL = 1; R/WR ← WR
 		e["WR"] = []string{r("mcu", 16), r("norY2", 3), r("norInd", 6), r("kb173", 7), r("idt", 20)}
+	} else {
+		e["WR"] = []string{r("mcu", 16), r("norY2", 3), r("norInd", 6), r("kb173", 7), r("idt", 61)}
 	}
-	e["RD"] = []string{r("mcu", 17), r("idt", 62), r("or", 2)}
-	if v.Decoder { // 244 OE — часть 2 вентиля ИЛИ (выв. 4, 5, 6)
+	e["RD"] = []string{r("mcu", 17), r("idt", 62), r("or", 5)}
+	if v.Decoder { // 244 OE — вторая часть DD9 (выв. 4, 5, 6), RD_buf — первая (1, 2, 3)
 		e["RD"] = []string{r("mcu", 17), r("idt", 62), r("or", 5), r("orBuf", 2)}
-		e["CSkb"] = []string{mp(v.CS.Kb), r("kb173", 9), r("kb173", 10), r("or", 4)}
 	}
 	e["ALE"] = []string{r("mcu", 30), r("latchA", 11)}
 	e["Y1"] = []string{r("mcu", mcuPin(v.Y1)), rc("xsY", 1)}
@@ -259,13 +260,10 @@ func expected(v Variant, roles map[string]*Comp) map[string][]string {
 	e["INTkb"] = []string{r("mcu", intPin[v.KbInt]), r("and", andOut)}
 	// строб X2 внешнего устройства: запись правым портом (R/WR) и прерывание МК
 	e["INTx2"] = []string{r("mcu", intPin[v.X2Int]), rc("xsX2", 1), r("idt", 20)}
-	if v.Decoder { // ТЗ-2026: строб только на INT1 (и подтяжка)
+	if v.Decoder { // ТЗ-2026: строб X2 → INT1 и подтяжка 10 к; буфером не управляет
 		e["INTx2"] = []string{r("mcu", intPin[v.X2Int]), rc("xsX2", 1), r("rX2", 2)}
 	}
-	e["OE244"] = []string{r("or", 3), r("buf", 1), r("buf", 19)}
-	if v.Decoder {
-		e["OE244"] = []string{r("or", 6), r("buf", 1), r("buf", 19)}
-	}
+	e["OE244"] = []string{r("or", 6), r("buf", 1), r("buf", 19)}
 	e["LoadY2"] = []string{r("norY2", 1), r("latchY2", 11)}
 	e["LoadInd"] = []string{r("norInd", 4), r("latchInd", 11)}
 	e["RST"] = []string{r("mcu", 9), r("cRst", 2), r("rRst", 1), r("kb173", 15)}

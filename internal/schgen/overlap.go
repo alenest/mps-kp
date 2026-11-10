@@ -465,16 +465,9 @@ func Overlaps(src string) ([]string, error) {
 			ents = append(ents, entry{p1, p0})
 		}
 	}
-	for i := range ents {
-		for j := i + 1; j < len(ents); j++ {
-			a, b := ents[i], ents[j]
-			same := math.Abs(a.on.X-b.on.X) < 0.01 && math.Abs(a.on.Y-b.on.Y) < 1.0 || math.Abs(a.on.Y-b.on.Y) < 0.01 && math.Abs(a.on.X-b.on.X) < 1.0
-			opposite := (a.w.X-a.on.X)*(b.w.X-b.on.X) < 0 || (a.w.Y-a.on.Y)*(b.w.Y-b.on.Y) < 0
-			if same && opposite {
-				add("входы в шину с двух сторон напротив друг друга около (%.1f; %.1f) мм — выглядит как пересечение шины", a.on.X, a.on.Y)
-			}
-		}
-	}
+	// Прямые провода к шине (требование 31.10.2026) могут входить с двух сторон в одну точку;
+	// это не «пересечение», если провод не имеет излома. Изломы проверяет NumberingDoubts.
+	_ = ents
 	// имя вывода не пересекает линии внутри своего корпуса (разделители полей ГОСТ-УГО; Гольцов: «MPU, RAM перечёркнуты»)
 	for _, it := range items {
 		if it.kind != "text" || !strings.HasPrefix(it.what, "имя вывода") && !strings.HasPrefix(it.what, "знак ") {

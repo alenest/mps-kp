@@ -28,7 +28,7 @@ func New(w, h float64, fontTTF []byte, fontMM, stroke float64) (*Canvas, error) 
 	if err != nil {
 		return nil, err
 	}
-	c := &Canvas{s: 8, fontMM: fontMM, fnt: f, stroke: stroke}
+	c := &Canvas{s: 12, fontMM: fontMM, fnt: f, stroke: stroke}
 	c.dc = gg.NewContext(int(w*c.s), int(h*c.s))
 	c.dc.SetRGB(1, 1, 1)
 	c.dc.Clear()
